@@ -230,7 +230,7 @@ class CacheObjectProvider extends CacheInfoRepository
       pragmaDb = await openDatabase(path);
       final check = await pragmaDb.rawQuery("pragma integrity_check");
       isIntegral = check.length == 1 && check[0].values.first == "ok";
-    } on DatabaseException catch (e) {
+    } on DatabaseException catch (_) {
       isIntegral = false;
     } finally {
       await pragmaDb?.close();
