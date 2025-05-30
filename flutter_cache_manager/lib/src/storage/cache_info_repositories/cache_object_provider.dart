@@ -109,10 +109,25 @@ class CacheObjectProvider extends CacheInfoRepository
 
   @override
   Future<CacheObject?> get(String key) async {
-    final List<Map<dynamic, dynamic>> maps = await db!.query(_tableCacheObject,
-        columns: null, where: '${CacheObject.columnKey} = ?', whereArgs: [key]);
-    if (maps.isNotEmpty) {
-      return CacheObject.fromMap(maps.first.cast<String, dynamic>());
+    if (db == null) {
+      return null;
+    }
+
+    try {
+      final List<Map<dynamic, dynamic>> maps = await db!.query(
+        _tableCacheObject,
+        columns: null,
+        where: '${CacheObject.columnKey} = ?',
+        whereArgs: [key],
+      );
+
+      if (maps.isNotEmpty) {
+        return CacheObject.fromMap(maps.first.cast<String, dynamic>());
+      }
+    } on DatabaseException {
+      // We can not read the file, so we assume it does not exist.
+    } catch (e) {
+      // We can not read the file, so we assume it does not exist.
     }
     return null;
   }

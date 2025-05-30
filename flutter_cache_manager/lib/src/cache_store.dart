@@ -109,9 +109,25 @@ class CacheStore {
 
   Future<CacheObject?> _getCacheDataFromDatabase(String key) async {
     final provider = await _cacheInfoRepository;
-    final data = await provider.get(key);
+    late final CacheObject? data;
+
+    try {
+      data = await provider.get(key);
+    } catch (e) {
+      cacheLogger.log(
+        'CacheManager: Failed to read cache info from database: $e',
+        CacheManagerLogLevel.warning,
+      );
+
+      return null;
+    }
+
+    if (data == null) {
+      return null;
+    }
+
     if (await _fileExists(data)) {
-      _updateCacheDataInDatabase(data!);
+      _updateCacheDataInDatabase(data);
     }
     _scheduleCleanup();
     return data;
