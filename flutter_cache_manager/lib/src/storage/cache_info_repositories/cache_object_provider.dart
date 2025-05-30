@@ -98,13 +98,28 @@ class CacheObjectProvider extends CacheInfoRepository
   }
 
   @override
-  Future<CacheObject> insert(CacheObject cacheObject,
-      {bool setTouchedToNow = true}) async {
-    final id = await db!.insert(
-      _tableCacheObject,
-      cacheObject.toMap(setTouchedToNow: setTouchedToNow),
-    );
-    return cacheObject.copyWith(id: id);
+  Future<CacheObject> insert(
+    CacheObject cacheObject, {
+    bool setTouchedToNow = true,
+  }) async {
+    if (db == null) {
+      return cacheObject;
+    }
+
+    try {
+      final int? id = await db?.insert(
+        _tableCacheObject,
+        cacheObject.toMap(setTouchedToNow: setTouchedToNow),
+      );
+
+      return id == null ? cacheObject : cacheObject.copyWith(id: id);
+    } on DatabaseException {
+      // We can not read the file, so we assume it does not exist.
+      return cacheObject;
+    } catch (e) {
+      // We can not read the file, so we assume it does not exist.
+      return cacheObject;
+    }
   }
 
   @override
@@ -114,14 +129,14 @@ class CacheObjectProvider extends CacheInfoRepository
     }
 
     try {
-      final List<Map<dynamic, dynamic>> maps = await db!.query(
+      final List<Map<dynamic, dynamic>>? maps = await db?.query(
         _tableCacheObject,
         columns: null,
         where: '${CacheObject.columnKey} = ?',
         whereArgs: [key],
       );
 
-      if (maps.isNotEmpty) {
+      if (maps != null && maps.isNotEmpty) {
         return CacheObject.fromMap(maps.first.cast<String, dynamic>());
       }
     } on DatabaseException {
@@ -163,17 +178,33 @@ class CacheObjectProvider extends CacheInfoRepository
 
   @override
   Future<List<CacheObject>> getObjectsOverCapacity(int capacity) async {
-    return CacheObject.fromMapList(await db!.query(
-      _tableCacheObject,
-      columns: null,
-      orderBy: '${CacheObject.columnTouched} DESC',
-      where: '${CacheObject.columnTouched} < ?',
-      whereArgs: [
-        DateTime.now().subtract(const Duration(days: 1)).millisecondsSinceEpoch
-      ],
-      limit: 100,
-      offset: capacity,
-    ));
+    if (db == null) {
+      return [];
+    }
+
+    try {
+      final List<Map<String, Object?>>? mapList = await db?.query(
+        _tableCacheObject,
+        columns: null,
+        orderBy: '${CacheObject.columnTouched} DESC',
+        where: '${CacheObject.columnTouched} < ?',
+        whereArgs: [
+          DateTime.now()
+              .subtract(const Duration(days: 1))
+              .millisecondsSinceEpoch
+        ],
+        limit: 100,
+        offset: capacity,
+      );
+
+      return mapList == null ? [] : CacheObject.fromMapList(mapList);
+    } on DatabaseException {
+      // We can not read the file, so we assume it does not exist.
+      return [];
+    } catch (e) {
+      // We can not read the file, so we assume it does not exist.
+      return [];
+    }
   }
 
   @override

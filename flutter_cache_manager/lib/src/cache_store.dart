@@ -52,11 +52,18 @@ class CacheStore {
 
   Future<void> putFile(CacheObject cacheObject) async {
     _memCache[cacheObject.key] = cacheObject;
-    final dynamic out = await _updateCacheDataInDatabase(cacheObject);
+    try {
+      final dynamic out = await _updateCacheDataInDatabase(cacheObject);
 
-    // We update the cache object with the id if returned by the repository
-    if (out is CacheObject && out.id != null) {
-      _memCache[cacheObject.key] = cacheObject.copyWith(id: out.id);
+      // We update the cache object with the id if returned by the repository
+      if (out is CacheObject && out.id != null) {
+        _memCache[cacheObject.key] = cacheObject.copyWith(id: out.id);
+      }
+    } catch (e) {
+      cacheLogger.log(
+        'CacheManager: Failed to update cache info in database: $e',
+        CacheManagerLogLevel.warning,
+      );
     }
   }
 
@@ -113,6 +120,16 @@ class CacheStore {
 
     try {
       data = await provider.get(key);
+
+      if (data == null) {
+        return null;
+      }
+
+      if (await _fileExists(data)) {
+        _updateCacheDataInDatabase(data);
+      }
+      _scheduleCleanup();
+      return data;
     } catch (e) {
       cacheLogger.log(
         'CacheManager: Failed to read cache info from database: $e',
@@ -121,16 +138,6 @@ class CacheStore {
 
       return null;
     }
-
-    if (data == null) {
-      return null;
-    }
-
-    if (await _fileExists(data)) {
-      _updateCacheDataInDatabase(data);
-    }
-    _scheduleCleanup();
-    return data;
   }
 
   void _scheduleCleanup() {
@@ -152,17 +159,42 @@ class CacheStore {
     final toRemove = <int>[];
     final provider = await _cacheInfoRepository;
 
-    final overCapacity = await provider.getObjectsOverCapacity(_capacity);
-    for (final cacheObject in overCapacity) {
-      _removeCachedFile(cacheObject, toRemove);
+    try {
+      final List<CacheObject> overCapacity =
+          await provider.getObjectsOverCapacity(_capacity);
+
+      for (final cacheObject in overCapacity) {
+        _removeCachedFile(cacheObject, toRemove);
+      }
+    } catch (e) {
+      cacheLogger.log(
+        'CacheManager: Failed to get over capacity objects from database: $e',
+        CacheManagerLogLevel.warning,
+      );
     }
 
-    final oldObjects = await provider.getOldObjects(_maxAge);
-    for (final cacheObject in oldObjects) {
-      _removeCachedFile(cacheObject, toRemove);
+    try {
+      final List<CacheObject> oldObjects =
+          await provider.getOldObjects(_maxAge);
+
+      for (final cacheObject in oldObjects) {
+        _removeCachedFile(cacheObject, toRemove);
+      }
+    } catch (e) {
+      cacheLogger.log(
+        'CacheManager: Failed to get old objects from database: $e',
+        CacheManagerLogLevel.warning,
+      );
     }
 
-    await provider.deleteAll(toRemove);
+    try {
+      await provider.deleteAll(toRemove);
+    } catch (e) {
+      cacheLogger.log(
+        'CacheManager: Failed to delete all cache objects from provider: $e',
+        CacheManagerLogLevel.warning,
+      );
+    }
   }
 
   Future<void> emptyCache() async {
